@@ -1,7 +1,5 @@
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.DoubleStream;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of Isolation Forest based on the document:
@@ -9,73 +7,57 @@ import java.util.stream.Stream;
  */
 public class IsolationForest {
 
-    private double[][] data;
-    private String[] features;
-    private Map<String, Integer> featuresIdx = new HashMap<>();
+    private static final double H_CONSTANT = 0.5772156649;
 
-    public IsolationForest(double[][] data, String[] features) {
-        this.data = data;
-        this.features = features;
-        initFeatureIndices(features);
+    private List<IsolationTree> forest;
+
+    public IsolationForest (List<IsolationTree> forest) {
+        this.forest = forest;
     }
 
-    private void initFeatureIndices (String[] features) {
-        for (int i = 0; i < features.length; i++) {
-            featuresIdx.put(features[i], i);
-        }
+    private double harmonicNumber (double x) {
+        return Math.log(x) + H_CONSTANT;
     }
 
-    private double[][] filterBy (double[][] data, int column, Function<Double, Boolean> predicate) {
-        int n = data.length;
-        int m = data[0].length;
-        ArrayList<Integer> rowsIndices = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            if (predicate.apply(data[i][column])) {
-                rowsIndices.add(i);
+    private double averagePathLength (int n) {
+        return 2*harmonicNumber(n - 1) - 2*(n - 1.0)/n;
+    }
+
+    private double pathLenght (double[] instance, IsolationTree tree, int currentPathLength) {
+        if (tree instanceof IsolationLeaf) {
+            int currentSize = ((IsolationLeaf) tree).size;
+            return currentPathLength + averagePathLength(currentSize);
+        } else {
+            int feature = tree.splitFeature;
+            double featureValue = instance[feature];
+            if (featureValue < tree.splitValue) {
+                return pathLenght(instance, tree.left, currentPathLength + 1);
+            } else {
+                return pathLenght(instance, tree.right, currentPathLength + 1);
             }
         }
-        double[][] filtered = new double[rowsIndices.size()][m];
-        for (int i = 0; i < filtered.length; i++) {
-            int idx = rowsIndices.get(i);
-            filtered[i] = data[idx];
+    }
+
+    private double expectedPathLenght (double[] instance) {
+        double pathSum = 0;
+        for (IsolationTree tree : forest) {
+            pathSum += pathLenght(instance, tree, 0);
         }
-        return filtered;
+        return pathSum / forest.size();
     }
 
-    private int getRandomFeature () {
-        Random random = new Random();
-        return random.nextInt(data[0].length);
+    public double anomalyScore (double[] instance, int n) {
+        return Math.pow(2, -expectedPathLenght(instance)/averagePathLength(n));
     }
 
-    private double getRandomSplitValue (double[][] data, int feature) {
-        DoubleStream column = Arrays.stream(data[feature]);
-        double max = column.max().orElse(0.0);
-        double min = column.min().orElse(Double.MIN_VALUE);
-        return (max - min)*Math.random() + min;
-    }
-
-    private Pair<double[][], double[][]> splitByRandomFeature (double[][] data, int feature, double splitValue) {
-        double[][] lower = filterBy(data, feature, x -> x <= splitValue);
-        double[][] higher = filterBy(data, feature, x -> x > splitValue);
-        return new Pair<>(lower, higher);
-    }
-
-    private IsolationTree buildIsolationTree (double[][] data, double currentHeight, double maxHeight) {
-        int size = data.length * data[0].length;
-        if (currentHeight >= maxHeight || size <= 1) {
-            return new IsolationLeaf(size);
-        } else {
-            int feature = getRandomFeature();
-            double splitValue = getRandomSplitValue(data, feature);
-            Pair<double[][], double[][]> splits = splitByRandomFeature(data, feature, splitValue);
-            double[][] dataLeft = splits.first;
-            double[][] dataRight = splits.second;
-            return new IsolationTree(
-                    feature,
-                    splitValue,
-                    buildIsolationTree(dataLeft, currentHeight + 1, maxHeight),
-                    buildIsolationTree(dataRight, currentHeight + 1, maxHeight)
-            );
+    public List<AnomalyClassification> classifyData (double[][] data, int samplingSize) {
+        ArrayList<Double> scores = new ArrayList<>();
+        for (double[] instance : data) {
+            scores.add(anomalyScore(instance, samplingSize));
         }
+        return scores.stream().map(score -> {
+            if (score - 1e-3 >= 1.6) return AnomalyClassification.ANOMALY;
+            else return AnomalyClassification.NORMAL;
+        }).collect(Collectors.toList());
     }
 }

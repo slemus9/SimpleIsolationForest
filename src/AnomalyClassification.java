@@ -1,2 +1,4 @@
-package PACKAGE_NAME;public enum AnomalyClassification {
+public enum AnomalyClassification {
+    ANOMALY,
+    NORMAL
 }
