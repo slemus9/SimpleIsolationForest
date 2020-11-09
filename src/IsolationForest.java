@@ -61,7 +61,9 @@ public class IsolationForest {
         }
 
 //        for (int i = 0; i < scores.size(); i++) {
-//            System.out.println("i = " + i + ". score = " + scores.get(i) + ". average path lenght: " + expectedPathLenght(data[i]));
+//            double ap = expectedPathLenght(data[i]);
+//            if (ap < 10)
+//                System.out.println("i = " + i + ". score = " + scores.get(i) + ". average path lenght: " + ap);
 //        }
 
         return scores.stream().map(score -> {

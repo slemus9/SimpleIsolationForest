@@ -137,8 +137,8 @@ public class IsolationForestBuilder {
 
         IsolationForestBuilder forestBuilder = new IsolationForestBuilder(dataMatrix);
         IsolationForest forest = forestBuilder.buildForest(
-                20,
-                1560
+                IsolationForestBuilder.DEFAULT_NUM_TREES,
+                IsolationForestBuilder.DEFAULT_SAMPLING_SIZE
         );
 
         List<AnomalyClassification> classifications = forest.classifyData(
