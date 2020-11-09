@@ -9,6 +9,8 @@ public class IsolationForest {
 
     private static final double H_CONSTANT = 0.5772156649;
 
+    private static final double ANOMALY_THRESHOLD = 0.6;
+
     private List<IsolationTree> forest;
 
     public IsolationForest (List<IsolationTree> forest) {
@@ -26,7 +28,8 @@ public class IsolationForest {
     private double pathLenght (double[] instance, IsolationTree tree, int currentPathLength) {
         if (tree instanceof IsolationLeaf) {
             int currentSize = ((IsolationLeaf) tree).size;
-            return currentPathLength + averagePathLength(currentSize);
+            double adjustment = currentSize == 0 ? 0 : averagePathLength(currentSize);
+            return currentPathLength + adjustment;
         } else {
             int feature = tree.splitFeature;
             double featureValue = instance[feature];
@@ -41,7 +44,8 @@ public class IsolationForest {
     private double expectedPathLenght (double[] instance) {
         double pathSum = 0;
         for (IsolationTree tree : forest) {
-            pathSum += pathLenght(instance, tree, 0);
+            double p = pathLenght(instance, tree, 0);
+            pathSum += p;
         }
         return pathSum / forest.size();
     }
@@ -55,8 +59,13 @@ public class IsolationForest {
         for (double[] instance : data) {
             scores.add(anomalyScore(instance, samplingSize));
         }
+
+//        for (int i = 0; i < scores.size(); i++) {
+//            System.out.println("i = " + i + ". score = " + scores.get(i) + ". average path lenght: " + expectedPathLenght(data[i]));
+//        }
+
         return scores.stream().map(score -> {
-            if (score - 1e-3 >= 1.6) return AnomalyClassification.ANOMALY;
+            if (score >= ANOMALY_THRESHOLD) return AnomalyClassification.ANOMALY;
             else return AnomalyClassification.NORMAL;
         }).collect(Collectors.toList());
     }
