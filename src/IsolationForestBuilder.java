@@ -1,3 +1,5 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.DoubleStream;
@@ -34,15 +36,24 @@ public class IsolationForestBuilder {
         return filtered;
     }
 
-    private int getRandomFeature () {
+    private int getRandomFeature (double[][] data) {
         Random random = new Random();
         return random.nextInt(data[0].length);
     }
 
+    private double[] getFeature (double[][] data, int feature) {
+        int n = data.length;
+        double[] column = new double[n];
+        for (int i = 0; i < n; i++) {
+            column[i] = data[i][feature];
+        }
+        return column;
+    }
+
     private double getRandomSplitValue (double[][] data, int feature) {
-        DoubleStream column = Arrays.stream(data[feature]);
-        double max = column.max().orElse(0.0);
-        double min = column.min().orElse(Double.MIN_VALUE);
+        double[] column = getFeature(data, feature);
+        double max = Arrays.stream(column).max().orElse(0.0);
+        double min = Arrays.stream(column).min().orElse(Double.MIN_VALUE);
         return (max - min)*Math.random() + min;
     }
 
@@ -53,11 +64,11 @@ public class IsolationForestBuilder {
     }
 
     private IsolationTree buildIsolationTree (double[][] data, double currentHeight, double maxHeight) {
-        int size = data.length * data[0].length;
+        int size = data.length * (data.length == 0 ? 0 : data[0].length);
         if (currentHeight >= maxHeight || size <= 1) {
             return new IsolationLeaf(size);
         } else {
-            int feature = getRandomFeature();
+            int feature = getRandomFeature(data);
             double splitValue = getRandomSplitValue(data, feature);
             Pair<double[][], double[][]> splits = splitByRandomFeature(data, feature, splitValue);
             double[][] dataLeft = splits.first;
@@ -77,8 +88,13 @@ public class IsolationForestBuilder {
         int m = data[0].length;
         int dataSampleSize = Math.min(samplingSize, n);
         double[][] dataSample = new double[dataSampleSize][m];
+        boolean[] taken = new boolean[n];
         for (int i = 0; i < dataSampleSize; i++) {
             int idx = random.nextInt(n);
+            while (taken[idx]) {
+                idx = random.nextInt(n);
+            }
+            taken[idx] = true;
             dataSample[i] = data[idx];
         }
         return dataSample;
@@ -89,8 +105,48 @@ public class IsolationForestBuilder {
         int maxHeight = (int) Math.ceil(Math.log(numTrees) / Math.log(2) + 1e-11);
         for (int i = 0; i < numTrees; i++) {
             double[][] sampledData = sample(this.data, samplingSize);
-            forest.add(buildIsolationTree(sampledData, 0, maxHeight));
+            IsolationTree tree = buildIsolationTree(sampledData, 0, maxHeight);
+            forest.add(tree);
         }
         return new IsolationForest(forest);
+    }
+
+    public static void main(String[] args) throws Exception{
+        String filepath = "./data/multivariateNormal.csv";
+        BufferedReader br = new BufferedReader(new FileReader(filepath));
+        String line = "";
+        ArrayList<double[]> data = new ArrayList<>();
+        // Skip column id's
+        br.readLine();
+        while ((line = br.readLine()) != null) {
+            String[] nums = line.split(",");
+            int m = nums.length;
+            double[] row = new double[m - 1];
+            for (int i = 0; i < m - 1; i++) {
+                row[i] = Double.parseDouble(nums[i + 1]);
+            }
+            data.add(row);
+        }
+
+        int n = data.size();
+        int m = data.get(0).length;
+        double[][] dataMatrix = new double[n][m];
+        for (int i = 0; i < n; i++) {
+            dataMatrix[i] = data.get(i);
+        }
+
+        IsolationForestBuilder forestBuilder = new IsolationForestBuilder(dataMatrix);
+        IsolationForest forest = forestBuilder.buildForest(
+                IsolationForestBuilder.DEFAULT_NUM_TREES,
+                IsolationForestBuilder.DEFAULT_SAMPLING_SIZE
+        );
+
+        List<AnomalyClassification> classifications = forest.classifyData(
+                dataMatrix,
+                IsolationForestBuilder.DEFAULT_SAMPLING_SIZE
+        );
+        for (int i = 0; i < classifications.size(); i++) {
+            System.out.println("i = " + i + " . classification: " + classifications.get(i).toString());
+        }
     }
 }
